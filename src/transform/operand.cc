@@ -71,6 +71,9 @@ TransformInfo OperandTransform::operator()(Cfg& cfg) {
                       ((size_t)instr.mem_index() == operand_idx);
   const auto is_rip = ((M8*)&o)->rip_offset();
 
+  // Save instruction for redo
+  ti.redo_instr = instr;
+
   // Success: Any failure beyond here will require undoing the move
   cfg.get_function().replace(ti.undo_index[0], instr, false, is_rip);
   cfg.recompute_defs();
@@ -95,6 +98,15 @@ void OperandTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
   assert(cfg.get_function().check_invariants());
 
 
+}
+
+void OperandTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  // TODO(SG) : What do the parameters skip_first and rescale_rip mean in replace()?
+  cfg.get_function().replace(ti.undo_index[0], ti.undo_instr, true);
+  cfg.recompute_defs();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
 }
 
 

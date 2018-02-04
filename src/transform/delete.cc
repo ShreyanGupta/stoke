@@ -68,6 +68,16 @@ void DeleteTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
   assert(LatencyCost()(cfg).first);
 }
 
+void DeleteTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  auto& function = cfg.get_function();
+  function.remove(ti.undo_index[0]);
+  cfg.recompute();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
+  assert(LatencyCost()(cfg).first);
+}
+
 
 
 } // namespace stoke

@@ -77,6 +77,17 @@ void RotateTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
 
 }
 
+void RotateTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  if (ti.undo_index[0] < ti.undo_index[1])
+    cfg.get_function().rotate_left(ti.undo_index[0], ti.undo_index[1]);
+  else
+    cfg.get_function().rotate_right(ti.undo_index[1], ti.undo_index[0]);
+  cfg.recompute();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
+}
+
 
 
 } // namespace stoke

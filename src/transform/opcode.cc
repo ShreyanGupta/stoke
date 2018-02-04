@@ -47,6 +47,9 @@ TransformInfo OpcodeTransform::operator()(Cfg& cfg) {
     return ti;
   }
 
+  // Save instruction for redo
+  ti.redo_instr = instr;
+
   // Success: Any failure beyond here will require undoing the move
   // This operand hasn't changed, so the rip only needs local rescaling
   cfg.get_function().replace(ti.undo_index[0], instr, false, false);
@@ -72,6 +75,15 @@ void OpcodeTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
   assert(cfg.get_function().check_invariants());
 
 
+}
+
+void OpcodeTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  // TODO(SG) : What do the parameters skip_first and rescale_rip mean in replace()?
+  cfg.get_function().replace(ti.undo_index[0], ti.redo_instr, true);
+  cfg.recompute_defs();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
 }
 
 

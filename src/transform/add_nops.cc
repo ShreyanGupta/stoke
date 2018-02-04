@@ -85,6 +85,18 @@ void AddNopsTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
   assert(LatencyCost()(cfg).first);
 }
 
+void AddNopsTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  auto& function = cfg.get_function();
+  for (size_t i = 0; i < ti.undo_index[1]; ++i) {
+    function.insert(ti.undo_index[0], Instruction(NOP), false);
+  }
+  cfg.recompute();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
+  assert(LatencyCost()(cfg).first);
+}
+
 
 
 } // namespace stoke

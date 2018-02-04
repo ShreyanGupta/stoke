@@ -70,6 +70,14 @@ void GlobalSwapTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
 
 }
 
+void GlobalSwapTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  cfg.get_function().swap(ti.undo_index[0], ti.undo_index[1]);
+  cfg.recompute_defs();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
+}
+
 
 
 } // namespace stoke

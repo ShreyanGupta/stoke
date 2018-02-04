@@ -47,6 +47,9 @@ TransformInfo OpcodeWidthTransform::operator()(Cfg& cfg) {
     return ti;
   }
 
+  // Save instruction for redo
+  ti.redo_instr = instr;
+
   // Success: Any failure beyond here will require undoing the move
   cfg.get_function().replace(ti.undo_index[0], instr, false, true);
   cfg.recompute_defs();
@@ -73,6 +76,14 @@ void OpcodeWidthTransform::undo(Cfg& cfg, const TransformInfo& ti) const {
 
 }
 
+void OpcodeWidthTransform::redo(Cfg& cfg, const TransformInfo& ti) const {
+  // TODO(SG) : What do the parameters skip_first and rescale_rip mean in replace()?
+  cfg.get_function().replace(ti.undo_index[0], ti.redo_instr, true);
+  cfg.recompute_defs();
+
+  assert(cfg.invariant_no_undef_reads());
+  assert(cfg.get_function().check_invariants());
+}
 
 
 } // namespace stoke

@@ -38,6 +38,10 @@ public:
       originally passed to operator() */
   virtual void undo(Cfg& cfg, const TransformInfo& transform_info) const = 0;
 
+  /** Redo a transformation on the Cfg. Requires the 'TransformInfo' 
+      originally obtained from operator() with current Cfg */
+  virtual void redo(Cfg& cfg, const TransformInfo& transform_info) const = 0;
+
   /** Set a seed for the random number generator. */
   virtual void set_seed(std::default_random_engine::result_type seed) {
     gen_.seed(seed);

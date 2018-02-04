@@ -39,6 +39,10 @@ public:
       originally passed to operator() */
   void undo(Cfg& cfg, const TransformInfo& transform_info) const;
 
+  /** Redo a transformation on the Cfg. Requires the 'TransformInfo' 
+      originally obtained from operator() with current Cfg */
+  void redo(Cfg& cfg, const TransformInfo& transform_info) const;
+
 protected:
 
 private:

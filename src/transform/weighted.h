@@ -48,6 +48,10 @@ public:
     transforms_[info.move_type]->undo(cfg, info);
   }
 
+  void redo(Cfg& cfg, const TransformInfo& info) const {
+    transforms_[info.move_type]->redo(cfg, info);
+  }
+
   /** Add a transform to the set. */
   void insert_transform(Transform* tr, size_t weight = 1) {
     size_t label = transforms_.size();
