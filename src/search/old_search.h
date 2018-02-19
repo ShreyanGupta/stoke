@@ -28,72 +28,102 @@
 #include "src/transform/transform.h"
 #include "src/tunit/tunit.h"
 
-#include "src/search/mcts.h"
-
 namespace stoke {
 
 class Search {
 public:
   /** Create a new search from a transform helper. */
-  Search(Transform* transform) : mcts(Mcts(transform, 0, 1, 100, 2)) {}
+  Search(Transform* transform);
 
   /** Set the random search seed. */
   Search& set_seed(std::default_random_engine::result_type seed) {
-    mcts.set_seed(seed);
+    gen_.seed(seed);
     return *this;
   }
   /** Set the maximum number of proposals to perform before giving up. */
   Search& set_timeout_itr(size_t timeout) {
-    mcts.set_timeout_itr(timeout);
+    timeout_itr_ = timeout;
     return *this;
   }
   /** Set the maximum number of seconds to run for before giving up. */
   Search& set_timeout_sec(std::chrono::duration<double> timeout) {
-    mcts.set_timeout_sec(timeout);
+    timeout_sec_ = timeout;
     return *this;
   }
   /** Set the annealing constant. */
   Search& set_beta(double beta) {
-    // beta_ = beta;
+    beta_ = beta;
     return *this;
   }
   /** Set progress callback function. */
   Search& set_progress_callback(ProgressCallback cb, void* arg) {
-    mcts.set_progress_callback(cb, arg);
+    progress_cb_ = cb;
+    progress_cb_arg_ = arg;
     return *this;
   }
   /** Set new best correct callback function. */
   Search& set_new_best_correct_callback(NewBestCorrectCallback cb, void* arg) {
-    mcts.set_new_best_correct_callback(cb, arg);
+    new_best_correct_cb_ = cb;
+    new_best_correct_cb_arg_ = arg;
     return *this;
   }
   /** Set statistics callback function. */
   Search& set_statistics_callback(StatisticsCallback cb, void* arg) {
-    mcts.set_statistics_callback(cb, arg);
+    statistics_cb_ = cb;
+    statistics_cb_arg_ = arg;
     return *this;
   }
   /** Set the number of proposals to perform between statistics updates. */
   Search& set_statistics_interval(size_t si) {
-    mcts.set_statistics_interval(si);
+    interval_ = si;
     return *this;
   }
 
   /** Run search beginning from a search state using a user-supplied cost function. */
-  void run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, std::vector<stoke::TUnit>& aux_fxn) {
-    mcts.run(target, fxn, init, state, aux_fxn);
-  }
+  void run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, std::vector<stoke::TUnit>& aux_fxn);
   /** Stops an in-progress search.  To be used from a callback, for example. */
-  void stop(){
-    mcts.stop();
-  }
+  void stop();
 
   /** Returns the statistics collected for the search up to now (or the full statistics for the whole run, if search terminated). */
-  StatisticsCallbackData get_statistics() const {
-    return mcts.get_statistics();
-  }
+  StatisticsCallbackData get_statistics() const;
 
 private:
-  Mcts mcts;
+  /** Random generator. */
+  std::default_random_engine gen_;
+  /** For sampling moves. */
+  std::uniform_int_distribution<size_t> int_;
+  /** For sampling probabilities. */
+  std::uniform_real_distribution<double> prob_;
+
+  /** Transformation helper class. */
+  Transform* transform_;
+
+  /** How many iterations should search run for? */
+  size_t timeout_itr_;
+  /** How many seconds should search run for? */
+  std::chrono::duration<double> timeout_sec_;
+  /** Annealing constant. */
+  double beta_;
+
+  /** Progress callback. */
+  ProgressCallback progress_cb_;
+  void* progress_cb_arg_;
+  /** New best correct callback. */
+  NewBestCorrectCallback new_best_correct_cb_;
+  void* new_best_correct_cb_arg_;
+  /** Statistics callback. */
+  StatisticsCallback statistics_cb_;
+  void* statistics_cb_arg_;
+  /** How often are statistics printed? */
+  size_t interval_;
+
+  /** Statistics so far. */
+  std::vector<Statistics> move_statistics;
+  size_t num_iterations;
+  std::chrono::duration<double> elapsed;
+
+  /** Configures a search state. */
+  void configure(const Cfg& target, CostFunction& fxn, SearchState& state, std::vector<stoke::TUnit>& aux_fxn) const;
 };
 
 } // namespace stoke
