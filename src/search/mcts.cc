@@ -1,3 +1,6 @@
+#include <fstream>
+#include <iostream>
+
 #include <cassert>
 #include <csignal>
 #include <cmath>
@@ -19,7 +22,7 @@ void handler(int sig, siginfo_t* siginfo, void* context) {
   give_up_now = true;
 }
 
-void destructor_helper(Node* node){
+void destructor_helper(stoke::Node* node){
   if(node == nullptr) return;
   for(auto* child : node->children){
     destructor_helper(child);
@@ -27,7 +30,7 @@ void destructor_helper(Node* node){
   delete node;
 }
 
-void draw_graph_helper(std::ofstream& fout, Node* node){
+void draw_graph_helper(std::ofstream& fout, stoke::Node* node){
   for(auto* child : node->children){
     fout << "N_" << node << " -> N_" << child << ";\n";
     draw_graph_helper(fout, child);
@@ -53,13 +56,14 @@ float Node::score(){
 
 
 Mcts::Mcts(Transform* transform, int timeout_itr, int n, int r, int k) : 
-  transform_(transform),
-  timeout_itr_(timeout_itr),
+  root_(new Node(nullptr)),
   n_(n), 
   r_(r), 
   k_(k), 
-  root_(new Node(nullptr)) {
+  transform_(transform),
+  timeout_itr_(timeout_itr) {
 
+  cout << "Enter MCTS constructor" << endl;
   set_seed(0);
   set_timeout_itr(0);
   set_timeout_sec(steady_clock::duration::zero());
@@ -82,46 +86,100 @@ Mcts::Mcts(Transform* transform, int timeout_itr, int n, int r, int k) :
 }
 
 
-Node* Mcts::traverse(){
+Node* Mcts::traverse(SearchState& state){
   Node* curr_node = root_;
   while(curr_node->children.size() != 0){
-    Node* best_node = nullptr;
+    size_t best_child_index = -1;
     float best_score = 0;
-    for(auto* child : curr_node->children){
+    auto& children = curr_node->children;
+    auto& ti_vector = curr_node->ti_vector;
+    assert(children.size() == ti_vector.size());
+    for(size_t i=0; i<children.size(); ++i){
+      auto* child = children[i];
+      auto& ti = ti_vector[i];
       float score = child->score();
       if(score > best_score){
         best_score = score;
-        best_node = child;
+        best_child_index = i;
       }
     }
-    curr_node = best_node;
+    curr_node = children[best_child_index];
+    (*transform_).redo(state.current, ti_vector[best_child_index]);
   }
   return curr_node;
 }
 
-void Mcts::expand(Node* node){
+void Mcts::expand(Node* node, SearchState& state){
   auto& children = node->children;
+  auto& ti_vector = node->ti_vector;
   children = std::vector<Node*>(k_);
+  ti_vector = std::vector<TransformInfo>(k_);
   for(int i=0; i<k_; ++i){
     children[i] = new Node(node);
+    while(!ti_vector[i].success){
+      ti_vector[i] = (*transform_)(state.current);
+    }
+    (*transform_).undo(state.current, ti_vector[i]);
   }
 }
 
-float Mcts::rollout(Node* node){
+float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
   float score = 0;
   // Rollout n times
   for(int i=0; i<n_; ++i){
+    // Copy the init state
+    SearchState curr_state = state;
     // Rollout for a depth of r
     for(int j=0; j<r_; ++j){
-      // TODO: Rollout here
-      score += rand_(gen_);
+      // Random walk till depth r?
+
+      // MCMC till depth r?
+      TransformInfo ti = (*transform_)(curr_state.current);
+      if(!ti.success) continue;
+
+      const double p = prob_(gen_);
+      const double max = curr_state.current_cost - (log(p) / beta_);
+
+      const auto new_res = fxn(curr_state.current, max + 1);
+      const bool is_correct = new_res.first;
+      const auto new_cost = new_res.second;
+
+      if(new_cost > max){
+        (*transform_).undo(curr_state.current, ti);
+        continue;
+      }
+
+      curr_state.current_cost = new_cost;
+      const bool new_best_yet = new_cost < curr_state.best_yet_cost;
+      if (new_best_yet) {
+        curr_state.best_yet = curr_state.current;
+        curr_state.best_yet_cost = new_cost;
+      }
+      
+      const bool new_best_correct_yet = is_correct && ((new_cost == 0) || (new_cost < curr_state.best_correct_cost));
+      if (new_best_correct_yet) {
+        curr_state.success = true;
+        curr_state.best_correct = curr_state.current;
+        curr_state.best_correct_cost = new_cost;
+      }
+
+      // TODO: What do I put as the score?
+      score += prob_(gen_);
+    }
+
+    // Update the global state
+    if(curr_state.success && (curr_state.best_correct_cost <= state.best_correct_cost)){
+      state.success = true;
+      state.best_correct = curr_state.best_correct;
+      state.best_correct_cost = curr_state.best_correct_cost;
     }
   }
-  // TODO: Decide what score to return
+  // TODO: Decide what score to return for the node
   return score/n_/r_;
 }
 
 void Mcts::update(Node* node, float score){
+  // Do no need SearchState to update
   Node* curr_node = node;
   while(curr_node != nullptr){
     curr_node->update(score);
@@ -131,9 +189,8 @@ void Mcts::update(Node* node, float score){
 
 void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, vector<TUnit>& aux_fxns){
 
-  // Basic asserts
-  assert(timeout_itr_ > 0);
-  assert(timeout_sec_ != steady_clock::duration::zero());
+  cout << "Enter MCTS run function" << endl;
+  cout << "timeout_itr_ " << timeout_itr_ << " timeout_sec_ " << timeout_sec_.count() << endl;
 
   // Configure initial state
   configure(target, fxn, state, aux_fxns);
@@ -142,9 +199,7 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   assert(state.best_yet.is_sound());
   assert(state.best_correct.is_sound());
 
-  // Statistics callback variables
-  // FIXME: Search only works with 'WeightedTransform', because it needs
-  // statistics.
+  // Statistics callback variables. earch only works with 'WeightedTransform'
   move_statistics_ = vector<Statistics>(static_cast<WeightedTransform*>(transform_)->size());
   const auto start_time = chrono::steady_clock::now();
 
@@ -160,10 +215,10 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
   for(num_itr_ = 0; true; ++num_itr_){
     // When to exit the loop
-    time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start);
+    time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start_time);
     if(
       num_itr_ >= timeout_itr_ ||
-      time_elapsed_ >= timeout_sec_ ||
+      (timeout_sec_ != steady_clock::duration::zero() && time_elapsed_ >= timeout_sec_) ||
       state.current_cost <= 0 ||
       give_up_now
     ) break;
@@ -175,10 +230,10 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
     // Actual loop
     cout << "Iteration " << num_itr_ << endl;
-    Node* leaf = traverse();
-    expand(leaf);
+    Node* leaf = traverse(state);
+    expand(leaf, state);
     for(auto* child : leaf->children){
-      float score = rollout(child);
+      float score = rollout(child, state, fxn);
       update(child, score);
     }
   } // End of loop
@@ -192,9 +247,11 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   state.current.recompute();
   state.best_correct.recompute();
   state.best_yet.recompute();
+
+  // draw_graph("graph.dot");
 }
 
-StatisticsCallbackData Search::get_statistics() const {
+StatisticsCallbackData Mcts::get_statistics() const {
   return {move_statistics_, num_itr_, time_elapsed_, transform_};
 }
 

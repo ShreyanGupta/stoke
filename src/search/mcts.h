@@ -13,7 +13,10 @@
 #include "src/search/statistics.h"
 #include "src/search/statistics_callback.h"
 #include "src/transform/transform.h"
+#include "src/transform/info.h"
 #include "src/tunit/tunit.h"
+
+namespace stoke {
 
 class Node {
  private:
@@ -23,8 +26,9 @@ class Node {
  public:
   Node(Node* parent) : num_visit_(0), score_(0), parent(parent) {}
   Node* parent;
+  // std::vector<std::pair<Node*, TransformInfo> > children
   std::vector<Node*> children;
-  // std::vector<TransformInfo> transform;
+  std::vector<TransformInfo> ti_vector;
   
   // Function to update score
   void update(float score);
@@ -36,7 +40,7 @@ class Node {
 
 class Mcts { 
  public:
-  Mcts(int timeout_itr, int n, int r, int k);
+  Mcts(Transform* transform, int timeout_itr, int n, int r, int k);
   ~Mcts();
   // Visualizing graph
   void draw_graph(std::string file_name);
@@ -44,46 +48,46 @@ class Mcts {
   // All functions from original Search class below
 
   /** Set the random search seed. */
-  Search& set_seed(std::default_random_engine::result_type seed) {
+  Mcts& set_seed(std::default_random_engine::result_type seed) {
     gen_.seed(seed);
     return *this;
   }
   /** Set the maximum number of proposals to perform before giving up. */
-  Search& set_timeout_itr(size_t timeout) {
+  Mcts& set_timeout_itr(size_t timeout) {
     timeout_itr_ = timeout;
     return *this;
   }
   /** Set the maximum number of seconds to run for before giving up. */
-  Search& set_timeout_sec(std::chrono::duration<double> timeout) {
+  Mcts& set_timeout_sec(std::chrono::duration<double> timeout) {
     timeout_sec_ = timeout;
     return *this;
   }
   /** Set the annealing constant. */
   // Don't need it for MCTS
-  Search& set_beta(double beta) {
-    // beta_ = beta;
+  Mcts& set_beta(double beta) {
+    beta_ = beta;
     return *this;
   }
   /** Set progress callback function. */
-  Search& set_progress_callback(ProgressCallback cb, void* arg) {
+  Mcts& set_progress_callback(ProgressCallback cb, void* arg) {
     progress_cb_ = cb;
     progress_cb_arg_ = arg;
     return *this;
   }
   /** Set new best correct callback function. */
-  Search& set_new_best_correct_callback(NewBestCorrectCallback cb, void* arg) {
+  Mcts& set_new_best_correct_callback(NewBestCorrectCallback cb, void* arg) {
     new_best_correct_cb_ = cb;
     new_best_correct_cb_arg_ = arg;
     return *this;
   }
   /** Set statistics callback function. */
-  Search& set_statistics_callback(StatisticsCallback cb, void* arg) {
+  Mcts& set_statistics_callback(StatisticsCallback cb, void* arg) {
     statistics_cb_ = cb;
     statistics_cb_arg_ = arg;
     return *this;
   }
   /** Set the number of proposals to perform between statistics updates. */
-  Search& set_statistics_interval(size_t si) {
+  Mcts& set_statistics_interval(size_t si) {
     interval_ = si;
     return *this;
   }
@@ -97,19 +101,21 @@ class Mcts {
   void stop();
 
  private:
+  // Not allowed to copy
+  Mcts& operator=(const Mcts& copy);
+
   Node* root_;
-  int timeout_itr_;
-  int k_;  // Number of children
-  int r_;  // Depth of rollout
+  // int timeout_itr_;
   int n_;  // Number of rollouts
+  int r_;  // Depth of rollout
+  int k_;  // Number of children
 
   std::uniform_real_distribution<float> rand_;
 
-  Node* traverse();
-  void expand(Node* node);
-  float rollout(Node* node);
+  Node* traverse(SearchState& state);
+  void expand(Node* node, SearchState& state);
+  float rollout(Node* node, SearchState& state, CostFunction& fxn);
   void update(Node* node, float score);
-
   
 
   // All original private members
@@ -119,7 +125,7 @@ class Mcts {
   /** For sampling moves. */
   // std::uniform_int_distribution<size_t> int_;
   /** For sampling probabilities. */
-  // std::uniform_real_distribution<double> prob_;
+  std::uniform_real_distribution<double> prob_;
 
   /** Transformation helper class. */
   Transform* transform_;
@@ -128,6 +134,8 @@ class Mcts {
   size_t timeout_itr_;
   /** How many seconds should search run for? */
   std::chrono::duration<double> timeout_sec_;
+  /** Annealing constant. */
+  double beta_;
 
   /** Progress callback. */
   ProgressCallback progress_cb_;
@@ -150,5 +158,7 @@ class Mcts {
   void configure(const Cfg& target, CostFunction& fxn, SearchState& state, std::vector<stoke::TUnit>& aux_fxn) const;
 
 };
+
+} // namespace stoke
 
 #endif

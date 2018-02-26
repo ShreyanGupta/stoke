@@ -35,7 +35,7 @@ namespace stoke {
 class Search {
 public:
   /** Create a new search from a transform helper. */
-  Search(Transform* transform) : mcts(Mcts(transform, 0, 1, 100, 2)) {}
+  Search(Transform* transform) : mcts(Mcts(transform, 0, 1, 1000, 5)) {}
 
   /** Set the random search seed. */
   Search& set_seed(std::default_random_engine::result_type seed) {
@@ -54,7 +54,7 @@ public:
   }
   /** Set the annealing constant. */
   Search& set_beta(double beta) {
-    // beta_ = beta;
+    mcts.set_beta(beta);
     return *this;
   }
   /** Set progress callback function. */
