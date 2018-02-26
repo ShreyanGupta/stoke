@@ -13,6 +13,8 @@ using namespace std;
 using namespace std::chrono;
 using namespace x64asm;
 
+// TODO: Figure out about last_result_id in SearchState
+// TODO: Figure out about the redo operation in Transform
 
 namespace {
 
@@ -37,6 +39,19 @@ void draw_graph_helper(std::ofstream& fout, stoke::Node* node){
   }
   // fout << "N_" << node << " [label=\"" << node->score() << "/" << node->num_visit() << "\"];\n";
   fout << "N_" << node << " [label=\"\"];\n";
+}
+
+void update_global_state(stoke::SearchState& curr_state, stoke::SearchState& state){
+  if(curr_state.best_yet_cost <= state.best_yet_cost){
+    state.best_yet = curr_state.best_yet;
+    state.best_yet_cost = curr_state.best_yet_cost;
+  }
+
+  if(curr_state.success && (curr_state.best_correct_cost <= state.best_correct_cost)){
+    state.success = true;
+    state.best_correct = curr_state.best_correct;
+    state.best_correct_cost = curr_state.best_correct_cost;
+  }
 }
 
 } // namespace
@@ -168,11 +183,7 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
     }
 
     // Update the global state
-    if(curr_state.success && (curr_state.best_correct_cost <= state.best_correct_cost)){
-      state.success = true;
-      state.best_correct = curr_state.best_correct;
-      state.best_correct_cost = curr_state.best_correct_cost;
-    }
+    update_global_state(curr_state, state);
   }
   // TODO: Decide what score to return for the node
   return score/n_/r_;
@@ -214,6 +225,8 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   give_up_now = false;
 
   for(num_itr_ = 0; true; ++num_itr_){
+    cout << "Iteration " << num_itr_ << endl;
+
     // When to exit the loop
     time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start_time);
     if(
@@ -228,14 +241,20 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
       statistics_cb_(get_statistics(), statistics_cb_arg_);
     }
 
+    // Work with current_state
+    SearchState curr_state = state;
+
     // Actual loop
-    cout << "Iteration " << num_itr_ << endl;
-    Node* leaf = traverse(state);
-    expand(leaf, state);
+    Node* leaf = traverse(curr_state);
+    expand(leaf, curr_state);
     for(auto* child : leaf->children){
-      float score = rollout(child, state, fxn);
+      float score = rollout(child, curr_state, fxn);
       update(child, score);
     }
+
+    // Update global state
+    update_global_state(curr_state, state);
+
   } // End of loop
 
   if (give_up_now) {
