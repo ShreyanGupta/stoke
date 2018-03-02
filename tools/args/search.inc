@@ -43,6 +43,24 @@ cpputil::ValueArg<Init, InitReader, InitWriter>& init_arg =
   .description("Initial search state")
   .default_val(Init::ZERO);
 
+cpputil::ValueArg<size_t>& n_arg =
+  cpputil::ValueArg<size_t>::create("num_rollouts")
+  .usage("<int>")
+  .description("Number of rollouts for a new node in MCTS")
+  .default_val(1);
+
+cpputil::ValueArg<size_t>& r_arg =
+  cpputil::ValueArg<size_t>::create("depth_rollouts")
+  .usage("<int>")
+  .description("Depth of each rollout for a new node in MCTS")
+  .default_val(1000);
+
+cpputil::ValueArg<size_t>& k_arg =
+  cpputil::ValueArg<size_t>::create("num_children")
+  .usage("<int>")
+  .description("Numebr of children created for a leaf node in MCTS")
+  .default_val(4);
+
 } // namespace stoke
 
 #endif

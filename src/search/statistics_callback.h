@@ -17,6 +17,7 @@
 
 #include <chrono>
 #include <vector>
+#include <functional>
 
 #include "src/search/statistics.h"
 #include "src/transform/transform.h"
@@ -37,8 +38,10 @@ struct StatisticsCallbackData {
 };
 
 /** Callback signature */
-typedef void (*StatisticsCallback)(const StatisticsCallbackData& data, void* arg);
-
+// typedef void (*StatisticsCallback)(const StatisticsCallbackData& data, void* arg);
+// using StatisticsCallback = void(*)(const StatisticsCallbackData& data, void* arg);
+using StatisticsCallback = std::function<void(const StatisticsCallbackData&, void*)>;
+using rStatisticsCallback = std::function<void(const StatisticsCallbackData&)>;
 } // namespace stoke
 
 #endif

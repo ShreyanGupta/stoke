@@ -13,9 +13,6 @@ using namespace std;
 using namespace std::chrono;
 using namespace x64asm;
 
-// TODO: Figure out about last_result_id in SearchState
-// TODO: Figure out about the redo operation in Transform
-
 namespace {
 
 bool give_up_now = false;
@@ -24,10 +21,11 @@ void handler(int sig, siginfo_t* siginfo, void* context) {
   give_up_now = true;
 }
 
-void destructor_helper(stoke::Node* node){
+void delete_node(stoke::Node* node, stoke::Node* new_root = nullptr){
   if(node == nullptr) return;
+  if(node == new_root) return;
   for(auto* child : node->children){
-    destructor_helper(child);
+    delete_node(child, new_root);
   }
   delete node;
 }
@@ -63,20 +61,9 @@ void Node::update(float score){
   score_ += score;
 }
 
-float Node::score(){
-  // TODO: Update this to UCT
-  // Need num_iteration for that
-  return score_/num_visit_;
-}
-
-
-Mcts::Mcts(Transform* transform, int timeout_itr, int n, int r, int k) : 
+Mcts::Mcts(Transform* transform) : 
   root_(new Node(nullptr)),
-  n_(n), 
-  r_(r), 
-  k_(k), 
-  transform_(transform),
-  timeout_itr_(timeout_itr) {
+  transform_(transform) {
 
   cout << "Enter MCTS constructor" << endl;
   set_seed(0);
@@ -85,6 +72,7 @@ Mcts::Mcts(Transform* transform, int timeout_itr, int n, int r, int k) :
   set_progress_callback(nullptr, nullptr);
   set_statistics_callback(nullptr, nullptr);
   set_statistics_interval(100000);
+  set_mcts_args(1, 1000, 4);
 
   static bool once = false;
   if (!once) {
@@ -101,9 +89,10 @@ Mcts::Mcts(Transform* transform, int timeout_itr, int n, int r, int k) :
 }
 
 
-Node* Mcts::traverse(SearchState& state){
+Node* Mcts::traverse(SearchState& state, int depth){
   Node* curr_node = root_;
-  while(curr_node->children.size() != 0){
+  int curr_depth = 0;
+  while(curr_node->children.size() != 0 && curr_depth != depth){
     size_t best_child_index = -1;
     float best_score = 0;
     auto& children = curr_node->children;
@@ -112,7 +101,7 @@ Node* Mcts::traverse(SearchState& state){
     for(size_t i=0; i<children.size(); ++i){
       auto* child = children[i];
       auto& ti = ti_vector[i];
-      float score = child->score();
+      float score = node_score(child);
       if(score > best_score){
         best_score = score;
         best_child_index = i;
@@ -120,6 +109,7 @@ Node* Mcts::traverse(SearchState& state){
     }
     curr_node = children[best_child_index];
     (*transform_).redo(state.current, ti_vector[best_child_index]);
+    ++curr_depth;
   }
   return curr_node;
 }
@@ -198,6 +188,18 @@ void Mcts::update(Node* node, float score){
   }
 }
 
+float Mcts::node_score(Node* node){
+  float x = node->score_ / node->num_visit_;
+  float confidence = sqrt(2*log(num_itr_) / node->num_visit_);
+  return x + confidence;
+}
+
+void Mcts::trim(SearchState& state, int depth){
+  Node* new_root = traverse(state, depth);
+  delete_node(root_, new_root);
+  root_ = new_root;
+}
+
 void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, vector<TUnit>& aux_fxns){
 
   cout << "Enter MCTS run function" << endl;
@@ -237,8 +239,8 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
     ) break;
 
     // Invoke statistics callback if we've been running for long enough
-    if ((statistics_cb_ != nullptr) && (num_itr_ % interval_ == 0) && num_itr_ > 0) {
-      statistics_cb_(get_statistics(), statistics_cb_arg_);
+    if ((statistics_cb_ != nullptr) && (num_itr_ % statistics_interval_ == 0) && num_itr_ > 0) {
+      statistics_cb_(get_statistics());
     }
 
     // Work with current_state
@@ -321,7 +323,7 @@ void Mcts::configure(const Cfg& target, CostFunction& fxn, SearchState& state, v
 }
 
 Mcts::~Mcts(){
-  destructor_helper(root_);
+  delete_node(root_);
 }
 
 } // namespace stoke

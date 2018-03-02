@@ -15,6 +15,8 @@
 #ifndef STOKE_SRC_SEARCH_PROGRESS_CALLBACK_H
 #define STOKE_SRC_SEARCH_PROGRESS_CALLBACK_H
 
+#include <functional>
+
 #include "src/search/search_state.h"
 
 namespace stoke {
@@ -25,8 +27,10 @@ struct ProgressCallbackData {
 };
 
 /** Callback signature */
-typedef void (*ProgressCallback)(const ProgressCallbackData& data, void* arg);
-
+// typedef void (*ProgressCallback)(const ProgressCallbackData& data, void* arg);
+// using ProgressCallback = void(*)(const ProgressCallbackData& data, void* arg);
+using ProgressCallback = std::function<void(const ProgressCallbackData&, void*)>;
+using rProgressCallback = std::function<void(const ProgressCallbackData&)>;
 } // namespace stoke
 
 #endif

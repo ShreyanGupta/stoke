@@ -35,7 +35,12 @@ namespace stoke {
 class Search {
 public:
   /** Create a new search from a transform helper. */
-  Search(Transform* transform) : mcts(Mcts(transform, 0, 1, 1000, 5)) {}
+  Search(Transform* transform) : mcts(Mcts(transform)) {}
+
+  Search& set_mcts_args(int n, int r, int k){
+    mcts.set_mcts_args(n,r,k);
+    return *this;
+  }
 
   /** Set the random search seed. */
   Search& set_seed(std::default_random_engine::result_type seed) {

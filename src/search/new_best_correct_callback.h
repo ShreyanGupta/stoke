@@ -15,6 +15,8 @@
 #ifndef STOKE_SRC_SEARCH_NEW_BEST_CORRECT_CALLBACK_H
 #define STOKE_SRC_SEARCH_NEW_BEST_CORRECT_CALLBACK_H
 
+#include <functional>
+
 #include "src/search/search_state.h"
 
 namespace stoke {
@@ -25,8 +27,10 @@ struct NewBestCorrectCallbackData {
 };
 
 /** Callback signature */
-typedef void (*NewBestCorrectCallback)(const NewBestCorrectCallbackData& data, void* arg);
-
+// typedef void (*NewBestCorrectCallback)(const NewBestCorrectCallbackData& data, void* arg);
+// using NewBestCorrectCallback = void(*)(const NewBestCorrectCallbackData& data, void* arg);
+using NewBestCorrectCallback = std::function<void(const NewBestCorrectCallbackData&, void*)>;
+using rNewBestCorrectCallback = std::function<void(const NewBestCorrectCallbackData&)>;
 } // namespace stoke
 
 #endif
