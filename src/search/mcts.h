@@ -19,8 +19,8 @@
 
 namespace stoke {
 
-class Node {
- public:
+struct Node {
+  
   Node(Node* parent) : num_visit_(0), score_(0), parent(parent) {}
   int num_visit_;
   float score_;
@@ -40,13 +40,13 @@ class Mcts {
   // Visualizing graph
   void draw_graph(std::string file_name);
 
+  // Set the mcts arguments.
   Mcts& set_mcts_args(int n, int r, int k){
     n_ = n;
     r_ = r;
     k_ = k;
     return *this;
   }
-
   // Set the random search seed. 
   Mcts& set_seed(std::default_random_engine::result_type seed) {
     gen_.seed(seed);
@@ -105,22 +105,17 @@ class Mcts {
   int r_;  // Depth of rollout
   int k_;  // Number of children
 
-  std::uniform_real_distribution<float> rand_;
-
   Node* traverse(SearchState& state, int depth = -1);
   void expand(Node* node, SearchState& state);
   float rollout(Node* node, SearchState& state, CostFunction& fxn);
   void update(Node* node, float score);
   float node_score(Node* node);
-  void trim(SearchState& state, int depth);
   
-
-  // All original private members
+  void trim(SearchState& state, int depth);
+  void delete_node(Node* node, Node* new_root = nullptr);
 
   // Random generator. 
   std::default_random_engine gen_;
-  // For sampling moves. 
-  // std::uniform_int_distribution<size_t> int_;
   // For sampling probabilities. 
   std::uniform_real_distribution<double> prob_;
 
@@ -146,6 +141,9 @@ class Mcts {
   std::vector<Statistics> move_statistics_;
   size_t num_itr_;
   std::chrono::duration<double> time_elapsed_;
+
+  // MCTS statistics
+  int num_nodes_;
 
   // Configures a search state. 
   void configure(const Cfg& target, CostFunction& fxn, SearchState& state, std::vector<stoke::TUnit>& aux_fxn) const;

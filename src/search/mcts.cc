@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "src/search/mcts.h"
+#include "src/search/score_aggregator.h"
 #include "src/transform/weighted.h"
 
 using namespace cpputil;
@@ -19,15 +20,6 @@ bool give_up_now = false;
 
 void handler(int sig, siginfo_t* siginfo, void* context) {
   give_up_now = true;
-}
-
-void delete_node(stoke::Node* node, stoke::Node* new_root = nullptr){
-  if(node == nullptr) return;
-  if(node == new_root) return;
-  for(auto* child : node->children){
-    delete_node(child, new_root);
-  }
-  delete node;
 }
 
 void draw_graph_helper(std::ofstream& fout, stoke::Node* node){
@@ -63,9 +55,9 @@ void Node::update(float score){
 
 Mcts::Mcts(Transform* transform) : 
   root_(new Node(nullptr)),
-  transform_(transform) {
+  transform_(transform), 
+  num_nodes_(0) {
 
-  cout << "Enter MCTS constructor" << endl;
   set_seed(0);
   set_timeout_itr(0);
   set_timeout_sec(steady_clock::duration::zero());
@@ -87,7 +79,6 @@ Mcts::Mcts(Transform* transform) :
     sigaction(SIGINT, &term_act, 0);
   }
 }
-
 
 Node* Mcts::traverse(SearchState& state, int depth){
   Node* curr_node = root_;
@@ -119,28 +110,41 @@ void Mcts::expand(Node* node, SearchState& state){
   auto& ti_vector = node->ti_vector;
   children = std::vector<Node*>(k_);
   ti_vector = std::vector<TransformInfo>(k_);
+  num_nodes_ += k_;
   for(int i=0; i<k_; ++i){
     children[i] = new Node(node);
     while(!ti_vector[i].success){
       ti_vector[i] = (*transform_)(state.current);
+      move_statistics_[ti_vector[i].move_type].num_proposed++;
     }
+    move_statistics_[ti_vector[i].move_type].num_succeeded++;
+    move_statistics_[ti_vector[i].move_type].num_accepted++;
     (*transform_).undo(state.current, ti_vector[i]);
   }
 }
 
 float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
-  float score = 0;
+  // Average out scored from all rollouts
+  AvgAggregator score;
   // Rollout n times
   for(int i=0; i<n_; ++i){
+    
     // Copy the init state
     SearchState curr_state = state;
+
+    // Aggregator for specific rollout
+    AvgAggregator agg;
+    
     // Rollout for a depth of r
     for(int j=0; j<r_; ++j){
       // Random walk till depth r?
 
       // MCMC till depth r?
       TransformInfo ti = (*transform_)(curr_state.current);
+      move_statistics_[ti.move_type].num_proposed++;
       if(!ti.success) continue;
+
+      move_statistics_[ti.move_type].num_succeeded++;
 
       const double p = prob_(gen_);
       const double max = curr_state.current_cost - (log(p) / beta_);
@@ -154,6 +158,8 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
         continue;
       }
 
+      move_statistics_[ti.move_type].num_accepted++;
+
       curr_state.current_cost = new_cost;
       const bool new_best_yet = new_cost < curr_state.best_yet_cost;
       if (new_best_yet) {
@@ -166,17 +172,24 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
         curr_state.success = true;
         curr_state.best_correct = curr_state.current;
         curr_state.best_correct_cost = new_cost;
+        if(new_best_correct_cb_ != nullptr){
+          new_best_correct_cb_({curr_state});
+        }
       }
 
-      // TODO: What do I put as the score?
-      score += prob_(gen_);
+      if ((progress_cb_ != nullptr) && (new_best_yet || new_best_correct_yet)) {
+        progress_cb_({curr_state});
+      }
+
+      agg += curr_state.current_cost;
     }
+
+    score += agg.get_score();
 
     // Update the global state
     update_global_state(curr_state, state);
   }
-  // TODO: Decide what score to return for the node
-  return score/n_/r_;
+  return score.get_score();
 }
 
 void Mcts::update(Node* node, float score){
@@ -200,10 +213,17 @@ void Mcts::trim(SearchState& state, int depth){
   root_ = new_root;
 }
 
-void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, vector<TUnit>& aux_fxns){
+void Mcts::delete_node(Node* node, Node* new_root){
+  if(node == nullptr) return;
+  if(node == new_root) return;
+  for(auto* child : node->children){
+    delete_node(child, new_root);
+  }
+  --num_nodes_;
+  delete node;
+}
 
-  cout << "Enter MCTS run function" << endl;
-  cout << "timeout_itr_ " << timeout_itr_ << " timeout_sec_ " << timeout_sec_.count() << endl;
+void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, vector<TUnit>& aux_fxns){
 
   // Configure initial state
   configure(target, fxn, state, aux_fxns);
@@ -324,6 +344,7 @@ void Mcts::configure(const Cfg& target, CostFunction& fxn, SearchState& state, v
 
 Mcts::~Mcts(){
   delete_node(root_);
+  assert(num_nodes_ == 0);
 }
 
 } // namespace stoke
