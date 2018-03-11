@@ -83,6 +83,11 @@ public:
     return *this;
   }
 
+  Search& set_mcts_statistics_interval(size_t si) {
+    mcts.set_mcts_statistics_interval(si);
+    return *this;
+  }
+
   /** Run search beginning from a search state using a user-supplied cost function. */
   void run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, std::vector<stoke::TUnit>& aux_fxn) {
     mcts.run(target, fxn, init, state, aux_fxn);

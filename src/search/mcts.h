@@ -13,6 +13,7 @@
 #include "src/search/search_state.h"
 #include "src/search/statistics.h"
 #include "src/search/statistics_callback.h"
+#include "src/search/mcts_statistics.h"
 #include "src/transform/transform.h"
 #include "src/transform/info.h"
 #include "src/tunit/tunit.h"
@@ -38,7 +39,7 @@ class Mcts {
   Mcts(Transform* transform);
   ~Mcts();
   // Visualizing graph
-  void draw_graph(std::string file_name);
+  // void draw_graph(std::string file_name);
 
   // Set the mcts arguments.
   Mcts& set_mcts_args(int n, int r, int k){
@@ -87,6 +88,11 @@ class Mcts {
     statistics_interval_ = si;
     return *this;
   }
+  // Set the number of proposals to perform between mcts statistics updates. 
+  Mcts& set_mcts_statistics_interval(size_t si) {
+    mcts_statistics_interval_ = si;
+    return *this;
+  }
 
   // Returns the statistics collected for the search up to now (or the full statistics for the whole run, if search terminated). 
   StatisticsCallbackData get_statistics() const;
@@ -106,7 +112,7 @@ class Mcts {
   int k_;  // Number of children
 
   Node* traverse(SearchState& state, int depth = -1);
-  void expand(Node* node, SearchState& state);
+  void expand(Node* node, SearchState& state, CostFunction& fxn);
   float rollout(Node* node, SearchState& state, CostFunction& fxn);
   void update(Node* node, float score);
   float node_score(Node* node);
@@ -136,14 +142,16 @@ class Mcts {
   
   // How often are statistics printed? 
   size_t statistics_interval_;
+  size_t mcts_statistics_interval_;
 
   // Statistics so far. 
   std::vector<Statistics> move_statistics_;
-  size_t num_itr_;
+  size_t num_mcmc_itr_;
   std::chrono::duration<double> time_elapsed_;
 
   // MCTS statistics
-  int num_nodes_;
+  MctsStatistics mcts_statistics_;
+  size_t num_itr_;
 
   // Configures a search state. 
   void configure(const Cfg& target, CostFunction& fxn, SearchState& state, std::vector<stoke::TUnit>& aux_fxn) const;

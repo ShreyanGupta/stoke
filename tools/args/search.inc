@@ -61,6 +61,12 @@ cpputil::ValueArg<size_t>& k_arg =
   .description("Numebr of children created for a leaf node in MCTS")
   .default_val(4);
 
+cpputil::ValueArg<size_t>& mcts_si_arg =
+  cpputil::ValueArg<size_t>::create("mcts_statistics_interval")
+  .usage("<int>")
+  .description("mcts_statistics_interval")
+  .default_val(200);
+
 } // namespace stoke
 
 #endif

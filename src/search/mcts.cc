@@ -5,6 +5,10 @@
 #include <csignal>
 #include <cmath>
 
+#include <map>
+#include <utility>
+
+#include "src/cost/cost.h"
 #include "src/search/mcts.h"
 #include "src/search/score_aggregator.h"
 #include "src/transform/weighted.h"
@@ -20,15 +24,6 @@ bool give_up_now = false;
 
 void handler(int sig, siginfo_t* siginfo, void* context) {
   give_up_now = true;
-}
-
-void draw_graph_helper(std::ofstream& fout, stoke::Node* node){
-  for(auto* child : node->children){
-    fout << "N_" << node << " -> N_" << child << ";\n";
-    draw_graph_helper(fout, child);
-  }
-  // fout << "N_" << node << " [label=\"" << node->score() << "/" << node->num_visit() << "\"];\n";
-  fout << "N_" << node << " [label=\"\"];\n";
 }
 
 void update_global_state(stoke::SearchState& curr_state, stoke::SearchState& state){
@@ -56,7 +51,8 @@ void Node::update(float score){
 Mcts::Mcts(Transform* transform) : 
   root_(new Node(nullptr)),
   transform_(transform), 
-  num_nodes_(0) {
+  num_mcmc_itr_(0),
+  mcts_statistics_(MctsStatistics(num_itr_, time_elapsed_)) {
 
   set_seed(0);
   set_timeout_itr(0);
@@ -84,8 +80,8 @@ Node* Mcts::traverse(SearchState& state, int depth){
   Node* curr_node = root_;
   int curr_depth = 0;
   while(curr_node->children.size() != 0 && curr_depth != depth){
-    size_t best_child_index = -1;
-    float best_score = 0;
+    int best_child_index = -1;
+    float best_score = -1;
     auto& children = curr_node->children;
     auto& ti_vector = curr_node->ti_vector;
     assert(children.size() == ti_vector.size());
@@ -93,11 +89,13 @@ Node* Mcts::traverse(SearchState& state, int depth){
       auto* child = children[i];
       auto& ti = ti_vector[i];
       float score = node_score(child);
+      // Pick the highest score
       if(score > best_score){
         best_score = score;
         best_child_index = i;
       }
     }
+    assert(best_child_index != -1);
     curr_node = children[best_child_index];
     (*transform_).redo(state.current, ti_vector[best_child_index]);
     ++curr_depth;
@@ -105,21 +103,40 @@ Node* Mcts::traverse(SearchState& state, int depth){
   return curr_node;
 }
 
-void Mcts::expand(Node* node, SearchState& state){
+void Mcts::expand(Node* node, SearchState& state, CostFunction& fxn){
+  // Stores the top k_ transformations.
+  std::multimap<Cost, TransformInfo> m;
+  for(int i=0; i<k_; ++i){
+    m.insert(std::make_pair((Cost)((0x1ull << 62) - 1), TransformInfo()));
+  }
+
+  // Search over a space of 1K transformations
+  for(int i=0; i<1000; ++i){
+    TransformInfo ti = (*transform_)(state.current);
+    if(!ti.success) continue;
+
+    const auto max_cost = m.rbegin()->first;
+    const auto new_res = fxn(state.current, max_cost + 1);
+    const auto new_cost = new_res.second;
+
+    if(new_cost < max_cost){
+      m.insert(std::make_pair(new_cost, ti));
+      m.erase(--m.end());
+    }
+
+    (*transform_).undo(state.current, ti);
+    assert((int)m.size() == k_);
+  }
+
   auto& children = node->children;
   auto& ti_vector = node->ti_vector;
-  children = std::vector<Node*>(k_);
-  ti_vector = std::vector<TransformInfo>(k_);
-  num_nodes_ += k_;
-  for(int i=0; i<k_; ++i){
-    children[i] = new Node(node);
-    while(!ti_vector[i].success){
-      ti_vector[i] = (*transform_)(state.current);
-      move_statistics_[ti_vector[i].move_type].num_proposed++;
-    }
-    move_statistics_[ti_vector[i].move_type].num_succeeded++;
-    move_statistics_[ti_vector[i].move_type].num_accepted++;
-    (*transform_).undo(state.current, ti_vector[i]);
+  assert(children.size() == 0);
+
+  for(auto& itr : m){
+    if(!itr.second.success) continue;
+    children.push_back(new Node(node));
+    ti_vector.push_back(itr.second);
+    mcts_statistics_.num_nodes_++;
   }
 }
 
@@ -137,9 +154,11 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
     
     // Rollout for a depth of r
     for(int j=0; j<r_; ++j){
-      // Random walk till depth r?
-
-      // MCMC till depth r?
+      // MCMC till depth r
+      num_mcmc_itr_++;
+      if ((statistics_cb_ != nullptr) && (num_mcmc_itr_ % statistics_interval_ == 0)) {
+        statistics_cb_(get_statistics());
+      }
       TransformInfo ti = (*transform_)(curr_state.current);
       move_statistics_[ti.move_type].num_proposed++;
       if(!ti.success) continue;
@@ -219,7 +238,7 @@ void Mcts::delete_node(Node* node, Node* new_root){
   for(auto* child : node->children){
     delete_node(child, new_root);
   }
-  --num_nodes_;
+  --mcts_statistics_.num_nodes_;
   delete node;
 }
 
@@ -247,8 +266,6 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   give_up_now = false;
 
   for(num_itr_ = 0; true; ++num_itr_){
-    cout << "Iteration " << num_itr_ << endl;
-
     // When to exit the loop
     time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start_time);
     if(
@@ -259,8 +276,8 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
     ) break;
 
     // Invoke statistics callback if we've been running for long enough
-    if ((statistics_cb_ != nullptr) && (num_itr_ % statistics_interval_ == 0) && num_itr_ > 0) {
-      statistics_cb_(get_statistics());
+    if(num_itr_ % mcts_statistics_interval_ == 0){
+      mcts_statistics_.print();
     }
 
     // Work with current_state
@@ -268,7 +285,7 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
     // Actual loop
     Node* leaf = traverse(curr_state);
-    expand(leaf, curr_state);
+    expand(leaf, curr_state, fxn);
     for(auto* child : leaf->children){
       float score = rollout(child, curr_state, fxn);
       update(child, score);
@@ -293,19 +310,11 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 }
 
 StatisticsCallbackData Mcts::get_statistics() const {
-  return {move_statistics_, num_itr_, time_elapsed_, transform_};
+  return {move_statistics_, num_mcmc_itr_, time_elapsed_, transform_};
 }
 
 void Mcts::stop() {
   give_up_now = true;
-}
-
-void Mcts::draw_graph(std::string file_name){
-  std::ofstream fout(file_name);
-  fout << "digraph G {\n";
-  draw_graph_helper(fout, root_);
-  fout << "}\n";
-  fout.close();
 }
 
 void Mcts::configure(const Cfg& target, CostFunction& fxn, SearchState& state, vector<TUnit>& aux_fxn) const {
@@ -344,7 +353,7 @@ void Mcts::configure(const Cfg& target, CostFunction& fxn, SearchState& state, v
 
 Mcts::~Mcts(){
   delete_node(root_);
-  assert(num_nodes_ == 0);
+  assert(mcts_statistics_.num_nodes_ == 0);
 }
 
 } // namespace stoke
