@@ -61,6 +61,18 @@ cpputil::ValueArg<size_t>& k_arg =
   .description("Numebr of children created for a leaf node in MCTS")
   .default_val(4);
 
+cpputil::ValueArg<size_t>& c_arg =
+  cpputil::ValueArg<size_t>::create("num_children_sampled")
+  .usage("<int>")
+  .description("Numebr of children to sample from for a leaf node in MCTS")
+  .default_val(1000);
+
+cpputil::ValueArg<size_t>& mcts_exploration_arg =
+  cpputil::ValueArg<size_t>::create("exploration_factor")
+  .usage("<float>")
+  .description("MCTS exploration factor")
+  .default_val(1);
+
 cpputil::ValueArg<size_t>& mcts_si_arg =
   cpputil::ValueArg<size_t>::create("mcts_statistics_interval")
   .usage("<int>")

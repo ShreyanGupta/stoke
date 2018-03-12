@@ -4,12 +4,14 @@
 #include <cassert>
 #include <csignal>
 #include <cmath>
+#include <climits>
 
 #include <map>
 #include <utility>
 
 #include "src/cost/cost.h"
 #include "src/search/mcts.h"
+#include "src/search/mcts_node.h"
 #include "src/search/score_aggregator.h"
 #include "src/transform/weighted.h"
 
@@ -60,7 +62,7 @@ Mcts::Mcts(Transform* transform) :
   set_progress_callback(nullptr, nullptr);
   set_statistics_callback(nullptr, nullptr);
   set_statistics_interval(100000);
-  set_mcts_args(1, 1000, 4);
+  set_mcts_args(1, 1000, 4, 1000, 1);
 
   static bool once = false;
   if (!once) {
@@ -81,7 +83,8 @@ Node* Mcts::traverse(SearchState& state, int depth){
   int curr_depth = 0;
   while(curr_node->children.size() != 0 && curr_depth != depth){
     int best_child_index = -1;
-    float best_score = -1;
+    // TODO : Find the limit of the highest score
+    float least_score = 1000000;
     auto& children = curr_node->children;
     auto& ti_vector = curr_node->ti_vector;
     assert(children.size() == ti_vector.size());
@@ -89,9 +92,9 @@ Node* Mcts::traverse(SearchState& state, int depth){
       auto* child = children[i];
       auto& ti = ti_vector[i];
       float score = node_score(child);
-      // Pick the highest score
-      if(score > best_score){
-        best_score = score;
+      // Pick the lowest score
+      if(score < least_score){
+        least_score = score;
         best_child_index = i;
       }
     }
@@ -107,11 +110,12 @@ void Mcts::expand(Node* node, SearchState& state, CostFunction& fxn){
   // Stores the top k_ transformations.
   std::multimap<Cost, TransformInfo> m;
   for(int i=0; i<k_; ++i){
-    m.insert(std::make_pair((Cost)((0x1ull << 62) - 1), TransformInfo()));
+    // TODO : Find the limit of the highest score
+    m.insert(std::make_pair((Cost)(100000), TransformInfo()));
   }
 
-  // Search over a space of 1K transformations
-  for(int i=0; i<1000; ++i){
+  // Search over a space of c_ transformations
+  for(int i=0; i < std::max(c_,2*k_); ++i){
     TransformInfo ti = (*transform_)(state.current);
     if(!ti.success) continue;
 
@@ -221,15 +225,26 @@ void Mcts::update(Node* node, float score){
 }
 
 float Mcts::node_score(Node* node){
+  assert(node->num_visit_ != 0);
+
   float x = node->score_ / node->num_visit_;
-  float confidence = sqrt(2*log(num_itr_) / node->num_visit_);
-  return x + confidence;
+  float confidence = sqrt(2*log(num_itr_ + 1) / node->num_visit_);
+  
+  // TODO : Figure out the limits!!
+  assert(x > -10000);
+  assert(10000 > x);
+  assert(confidence > -10000);
+  assert(10000 > confidence);
+  
+  // -ve confidence as we are choosing the least value
+  return x - exploration_factor_ * confidence;
 }
 
 void Mcts::trim(SearchState& state, int depth){
   Node* new_root = traverse(state, depth);
   delete_node(root_, new_root);
   root_ = new_root;
+  root_->parent = nullptr;
 }
 
 void Mcts::delete_node(Node* node, Node* new_root){
@@ -277,7 +292,9 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
     // Invoke statistics callback if we've been running for long enough
     if(num_itr_ % mcts_statistics_interval_ == 0){
-      mcts_statistics_.print();
+      // Use private copy of search_state
+      SearchState curr_state = state;
+      mcts_statistics_.print(traverse(curr_state));
     }
 
     // Work with current_state
@@ -305,8 +322,6 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   state.current.recompute();
   state.best_correct.recompute();
   state.best_yet.recompute();
-
-  // draw_graph("graph.dot");
 }
 
 StatisticsCallbackData Mcts::get_statistics() const {

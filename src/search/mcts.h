@@ -14,25 +14,11 @@
 #include "src/search/statistics.h"
 #include "src/search/statistics_callback.h"
 #include "src/search/mcts_statistics.h"
+#include "src/search/mcts_node.h"
 #include "src/transform/transform.h"
-#include "src/transform/info.h"
 #include "src/tunit/tunit.h"
 
 namespace stoke {
-
-struct Node {
-  
-  Node(Node* parent) : num_visit_(0), score_(0), parent(parent) {}
-  int num_visit_;
-  float score_;
-  Node* parent;
-  std::vector<Node*> children;
-  std::vector<TransformInfo> ti_vector;
-  
-  // Function to update score
-  void update(float score);
-};
-
 
 class Mcts { 
  public:
@@ -42,10 +28,12 @@ class Mcts {
   // void draw_graph(std::string file_name);
 
   // Set the mcts arguments.
-  Mcts& set_mcts_args(int n, int r, int k){
+  Mcts& set_mcts_args(int n, int r, int k, int c, float exploration_factor){
     n_ = n;
     r_ = r;
     k_ = k;
+    c_ = c;
+    exploration_factor_ = exploration_factor;
     return *this;
   }
   // Set the random search seed. 
@@ -109,7 +97,9 @@ class Mcts {
   Node* root_;
   int n_;  // Number of rollouts
   int r_;  // Depth of rollout
-  int k_;  // Number of children
+  int k_;  // Number of children of given node
+  int c_;  // Number of sampled children
+  float exploration_factor_;  // Exploration vs exploitation factor
 
   Node* traverse(SearchState& state, int depth = -1);
   void expand(Node* node, SearchState& state, CostFunction& fxn);

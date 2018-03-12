@@ -37,8 +37,8 @@ public:
   /** Create a new search from a transform helper. */
   Search(Transform* transform) : mcts(Mcts(transform)) {}
 
-  Search& set_mcts_args(int n, int r, int k){
-    mcts.set_mcts_args(n,r,k);
+  Search& set_mcts_args(int n, int r, int k, int c, float exploration_factor){
+    mcts.set_mcts_args(n,r,k,c,exploration_factor);
     return *this;
   }
 

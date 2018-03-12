@@ -29,7 +29,7 @@ public:
     Search(transform) {
     set_seed(seed);
     set_beta(beta_arg);
-    set_mcts_args(n_arg, r_arg, k_arg);
+    set_mcts_args(n_arg, r_arg, k_arg, c_arg, mcts_exploration_arg);
     set_mcts_statistics_interval(mcts_si_arg);
   }
 };
