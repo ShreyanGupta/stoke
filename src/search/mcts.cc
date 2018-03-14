@@ -22,10 +22,10 @@ using namespace x64asm;
 
 namespace {
 
-bool give_up_now = false;
+bool force_stop = false;
 
 void handler(int sig, siginfo_t* siginfo, void* context) {
-  give_up_now = true;
+  force_stop = true;
 }
 
 void update_global_state(stoke::SearchState& curr_state, stoke::SearchState& state){
@@ -87,7 +87,7 @@ Node* Mcts::traverse(SearchState& state, int depth){
     float least_score = 1000000;
     auto& children = curr_node->children;
     auto& ti_vector = curr_node->ti_vector;
-    assert(children.size() == ti_vector.size());
+
     for(size_t i=0; i<children.size(); ++i){
       auto* child = children[i];
       auto& ti = ti_vector[i];
@@ -116,6 +116,7 @@ void Mcts::expand(Node* node, SearchState& state, CostFunction& fxn){
 
   // Search over a space of c_ transformations
   for(int i=0; i < std::max(c_,2*k_); ++i){
+    if(stop_now(force_stop)) break;
     TransformInfo ti = (*transform_)(state.current);
     if(!ti.success) continue;
 
@@ -158,6 +159,8 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
     
     // Rollout for a depth of r
     for(int j=0; j<r_; ++j){
+      if(stop_now(force_stop)) break;
+
       // MCMC till depth r
       num_mcmc_itr_++;
       if ((statistics_cb_ != nullptr) && (num_mcmc_itr_ % statistics_interval_ == 0)) {
@@ -202,6 +205,7 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
 
       if ((progress_cb_ != nullptr) && (new_best_yet || new_best_correct_yet)) {
         progress_cb_({curr_state});
+        mcts_statistics_.time_cost_vec_.push_back(make_pair(time_elapsed_.count(), new_cost));
       }
 
       agg += curr_state.current_cost;
@@ -225,17 +229,10 @@ void Mcts::update(Node* node, float score){
 }
 
 float Mcts::node_score(Node* node){
-  assert(node->num_visit_ != 0);
+  if(node->num_visit_ == 0) return 0;
 
   float x = node->score_ / node->num_visit_;
-  float confidence = sqrt(2*log(num_itr_ + 1) / node->num_visit_);
-  
-  // TODO : Figure out the limits!!
-  assert(x > -10000);
-  assert(10000 > x);
-  assert(confidence > -10000);
-  assert(10000 > confidence);
-  
+  float confidence = sqrt(2*log(num_itr_ + 1) / node->num_visit_);  
   // -ve confidence as we are choosing the least value
   return x - exploration_factor_ * confidence;
 }
@@ -257,6 +254,15 @@ void Mcts::delete_node(Node* node, Node* new_root){
   delete node;
 }
 
+bool Mcts::stop_now(bool force_stop){
+  time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start_time_);
+  return (
+    force_stop ||
+    num_itr_ >= timeout_itr_ ||
+    (timeout_sec_ != steady_clock::duration::zero() && time_elapsed_ >= timeout_sec_)
+  );
+}
+
 void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& state, vector<TUnit>& aux_fxns){
 
   // Configure initial state
@@ -268,7 +274,7 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
   // Statistics callback variables. earch only works with 'WeightedTransform'
   move_statistics_ = vector<Statistics>(static_cast<WeightedTransform*>(transform_)->size());
-  const auto start_time = chrono::steady_clock::now();
+  start_time_ = chrono::steady_clock::now();
 
   // Early corner case bailouts
   if (state.current_cost == 0) {
@@ -278,17 +284,11 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
     return;
   }
 
-  give_up_now = false;
+  force_stop = false;
 
   for(num_itr_ = 0; true; ++num_itr_){
     // When to exit the loop
-    time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start_time);
-    if(
-      num_itr_ >= timeout_itr_ ||
-      (timeout_sec_ != steady_clock::duration::zero() && time_elapsed_ >= timeout_sec_) ||
-      state.current_cost <= 0 ||
-      give_up_now
-    ) break;
+    if(stop_now(force_stop)) break;
 
     // Invoke statistics callback if we've been running for long enough
     if(num_itr_ % mcts_statistics_interval_ == 0){
@@ -313,7 +313,7 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
   } // End of loop
 
-  if (give_up_now) {
+  if (force_stop) {
     state.interrupted = true;
   }
 
@@ -322,6 +322,9 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   state.current.recompute();
   state.best_correct.recompute();
   state.best_yet.recompute();
+
+  SearchState curr_state = state;
+  mcts_statistics_.print(traverse(curr_state));
 }
 
 StatisticsCallbackData Mcts::get_statistics() const {
@@ -329,7 +332,7 @@ StatisticsCallbackData Mcts::get_statistics() const {
 }
 
 void Mcts::stop() {
-  give_up_now = true;
+  force_stop = true;
 }
 
 void Mcts::configure(const Cfg& target, CostFunction& fxn, SearchState& state, vector<TUnit>& aux_fxn) const {

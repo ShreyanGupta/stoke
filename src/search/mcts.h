@@ -109,6 +109,7 @@ class Mcts {
   
   void trim(SearchState& state, int depth);
   void delete_node(Node* node, Node* new_root = nullptr);
+  bool stop_now(bool force_stop);
 
   // Random generator. 
   std::default_random_engine gen_;
@@ -124,6 +125,7 @@ class Mcts {
   size_t timeout_itr_;
   // How many seconds should search run for? 
   std::chrono::duration<double> timeout_sec_;
+  std::chrono::steady_clock::time_point start_time_;
   
   // Callbacks
   rProgressCallback progress_cb_;

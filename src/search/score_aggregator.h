@@ -38,6 +38,7 @@ struct AvgAggregator : public ScoreAggregator {
   }
   
   float get_score(){
+    if(i == 0) return 0;
     return score/i;
   }
 };
@@ -56,6 +57,7 @@ struct MinAggregator : public ScoreAggregator {
   }
   
   float get_score(){
+    if(i == 0) return 0;
     return min_score;
   }
 };
@@ -81,6 +83,7 @@ struct EMAAggregator : public ScoreAggregator {
   }
   
   float get_score(){
+    if(i == 0) return 0;
     return decay_score/i;
   }
 };
