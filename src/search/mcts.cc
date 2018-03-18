@@ -54,7 +54,7 @@ Mcts::Mcts(Transform* transform) :
   root_(new Node(nullptr)),
   transform_(transform), 
   num_mcmc_itr_(0),
-  mcts_statistics_(MctsStatistics(num_itr_, time_elapsed_)) {
+  mcts_statistics_(MctsStatistics(num_itr_, num_mcmc_itr_, time_elapsed_)) {
 
   set_seed(0);
   set_timeout_itr(0);
