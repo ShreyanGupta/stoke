@@ -3,7 +3,8 @@
 
 #include <vector>
 
-#include "src/transform/info.h"
+#include "src/cfg/cfg.h"
+#include "src/cost/cost.h"
 
 namespace stoke {
 
@@ -12,12 +13,18 @@ struct Node {
   Node(Node* parent) : num_visit_(0), score_(0), parent(parent) {}
   int num_visit_;
   float score_;
+
+  Cfg cfg;
+  Cost cost;
+
   Node* parent;
   std::vector<Node*> children;
-  std::vector<TransformInfo> ti_vector;
   
   // Function to update score
-  void update(float score);
+  void update(float score){
+    ++num_visit_;
+    score_ += score;
+  }
 };
 
 } // namespace stoke

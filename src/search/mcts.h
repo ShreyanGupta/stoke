@@ -5,6 +5,7 @@
 #include <chrono>
 #include <random>
 #include <functional>
+#include <utility>
 
 #include "src/cost/cost_function.h"
 #include "src/search/init.h"
@@ -24,15 +25,12 @@ class Mcts {
  public:
   Mcts(Transform* transform);
   ~Mcts();
-  // Visualizing graph
-  // void draw_graph(std::string file_name);
 
   // Set the mcts arguments.
-  Mcts& set_mcts_args(int n, int r, int k, int c, float exploration_factor){
+  Mcts& set_mcts_args(int n, int r, int k, float exploration_factor){
     n_ = n;
     r_ = r;
     k_ = k;
-    c_ = c;
     exploration_factor_ = exploration_factor;
     return *this;
   }
@@ -98,14 +96,18 @@ class Mcts {
   int n_;  // Number of rollouts
   int r_;  // Depth of rollout
   int k_;  // Number of children of given node
-  int c_;  // Number of sampled children
   float exploration_factor_;  // Exploration vs exploitation factor
 
   Node* traverse(SearchState& state, int depth = -1);
-  void expand(Node* node, SearchState& state, CostFunction& fxn);
+  void expand(Node* node);
   float rollout(Node* node, SearchState& state, CostFunction& fxn);
-  void update(Node* node, float score);
+  void update_node(Node* node, float score);
+
   float node_score(Node* node);
+  // Returns (successful_transformation, is_correct)
+  std::pair<bool,bool> mcmc_step(SearchState& state, CostFunction& fxn);
+  // Update from local_state.current to state.best
+  void update_state(SearchState& state, SearchState& local_state, bool is_correct);
   
   void trim(SearchState& state, int depth);
   void delete_node(Node* node, Node* new_root = nullptr);
@@ -125,6 +127,7 @@ class Mcts {
   size_t timeout_itr_;
   // How many seconds should search run for? 
   std::chrono::duration<double> timeout_sec_;
+  // Start time
   std::chrono::steady_clock::time_point start_time_;
   
   // Callbacks
