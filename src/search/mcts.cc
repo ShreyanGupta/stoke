@@ -28,16 +28,16 @@ void handler(int sig, siginfo_t* siginfo, void* context) {
   force_stop = true;
 }
 
-void update_global_state(stoke::SearchState& curr_state, stoke::SearchState& state){
-  if(curr_state.best_yet_cost <= state.best_yet_cost){
-    state.best_yet = curr_state.best_yet;
-    state.best_yet_cost = curr_state.best_yet_cost;
+void update_global_state(stoke::SearchState& state, stoke::SearchState& local_state){
+  if(local_state.best_yet_cost < state.best_yet_cost){
+    state.best_yet = local_state.best_yet;
+    state.best_yet_cost = local_state.best_yet_cost;
   }
 
-  if(curr_state.success && (curr_state.best_correct_cost <= state.best_correct_cost)){
+  if(local_state.success && (local_state.best_correct_cost == 0 || local_state.best_correct_cost < state.best_correct_cost)){
     state.success = true;
-    state.best_correct = curr_state.best_correct;
-    state.best_correct_cost = curr_state.best_correct_cost;
+    state.best_correct = local_state.best_correct;
+    state.best_correct_cost = local_state.best_correct_cost;
   }
 }
 
@@ -46,7 +46,7 @@ void update_global_state(stoke::SearchState& curr_state, stoke::SearchState& sta
 namespace stoke {
 
 Mcts::Mcts(Transform* transform) : 
-  root_(new Node(nullptr)),
+  root_(nullptr),
   transform_(transform), 
   num_mcmc_itr_(0),
   mcts_statistics_(MctsStatistics(num_itr_, num_mcmc_itr_, time_elapsed_)) {
@@ -73,7 +73,8 @@ Mcts::Mcts(Transform* transform) :
   }
 }
 
-Node* Mcts::traverse(SearchState& state, int depth){
+Node* Mcts::traverse(int depth){
+  assert(root_ != nullptr);
   Node* curr_node = root_;
   int curr_depth = 0;
   while(curr_node->children.size() != 0 && curr_depth != depth){
@@ -94,8 +95,6 @@ Node* Mcts::traverse(SearchState& state, int depth){
     curr_node = children[best_child_index];
     ++curr_depth;
   }
-  state->current = curr_node->cfg;
-  state->current_cost = curr_node->cost;
   return curr_node;
 }
 
@@ -103,13 +102,14 @@ void Mcts::expand(Node* node){
   auto& children = node->children;
   assert(children.size() == 0);
   for(int i=0; i<k_; ++i){
-    children.push_back(new Node(node));
+    children.push_back(new Node(node, node->state));
     mcts_statistics_.num_nodes_++;
   }
 }
 
-float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
+float Mcts::rollout(Node* node, CostFunction& fxn){
   // Rollout n times
+  SearchState& state = node->state;
   for(int i=0; i<n_; ++i){
     SearchState curr_state = state;
     // Rollout for a depth of r
@@ -119,16 +119,16 @@ float Mcts::rollout(Node* node, SearchState& state, CostFunction& fxn){
       if(result.first) update_state(state, curr_state, result.second);
     }
   }
-  node->cfg = state.best_yet;
-  node->cost = state.best_yet_cost;
-  return node->cost;
+  state.current = state.best_yet;
+  state.current_cost = state.best_yet_cost;
+  return state.current_cost;
 }
 
 void Mcts::update_node(Node* node, float score){
   // Do no need SearchState to update
   Node* curr_node = node;
   while(curr_node != nullptr){
-    curr_node->update_node(score);
+    curr_node->update(score);
     curr_node = curr_node->parent;
   }
 }
@@ -185,20 +185,20 @@ void Mcts::update_state(SearchState& state, SearchState& local_state, bool is_co
     state.success = true;
     state.best_correct = local_state.current;
     state.best_correct_cost = new_cost;
-  }
-
-  if(new_best_correct_cb_ != nullptr && new_best_correct_yet){
-    new_best_correct_cb_({state});
+    new_best_correct_cb_({local_state});
   }
 
   if ((progress_cb_ != nullptr) && (new_best_yet || new_best_correct_yet)) {
     progress_cb_({state});
-    mcts_statistics_.time_cost_vec_.push_back(make_pair(time_elapsed_.count(), new_cost));
+    auto& tc_vec = mcts_statistics_.time_cost_vec_;
+    if(tc_vec.size() == 0 || new_cost < tc_vec.back().second){
+      tc_vec.push_back(make_pair(time_elapsed_.count(), new_cost));
+    }
   }
 }
 
-void Mcts::trim(SearchState& state, int depth){
-  Node* new_root = traverse(state, depth);
+void Mcts::trim(int depth){
+  Node* new_root = traverse(depth);
   delete_node(root_, new_root);
   root_ = new_root;
   root_->parent = nullptr;
@@ -218,7 +218,7 @@ bool Mcts::stop_now(bool force_stop){
   time_elapsed_ = duration_cast<duration<double>>(steady_clock::now() - start_time_);
   return (
     force_stop ||
-    num_itr_ >= timeout_itr_ ||
+    num_mcmc_itr_ >= timeout_itr_ ||
     (timeout_sec_ != steady_clock::duration::zero() && time_elapsed_ >= timeout_sec_)
   );
 }
@@ -245,14 +245,13 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   }
 
   force_stop = false;
+  root_ = new Node(nullptr, state);
 
-  for(num_itr_ = 0; true; ++num_itr_){
+  for(num_itr_ = 0, num_mcmc_itr_ = 0; true; ++num_itr_){
     // When to exit the loop
     if(stop_now(force_stop)) break;
 
-    // Work with current_state
-    SearchState curr_state = state;
-    Node* leaf = traverse(curr_state);
+    Node* leaf = traverse();
     
     // Invoke statistics callback if we've been running for long enough
     if(num_itr_ % mcts_statistics_interval_ == 0){
@@ -261,13 +260,10 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
 
     expand(leaf);
     for(auto* child : leaf->children){
-      float score = rollout(child, curr_state, fxn);
+      float score = rollout(child, fxn);
+      update_global_state(state, child->state);
       update_node(child, score);
     }
-
-    // Update global state
-    update_global_state(curr_state, state);
-
   } // End of loop
 
   if (force_stop) {
@@ -280,8 +276,7 @@ void Mcts::run(const Cfg& target, CostFunction& fxn, Init init, SearchState& sta
   state.best_correct.recompute();
   state.best_yet.recompute();
 
-  SearchState curr_state = state;
-  mcts_statistics_.print(traverse(curr_state));
+  mcts_statistics_.print(traverse());
 }
 
 StatisticsCallbackData Mcts::get_statistics() const {

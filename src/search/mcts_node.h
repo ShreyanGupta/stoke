@@ -3,19 +3,21 @@
 
 #include <vector>
 
-#include "src/cfg/cfg.h"
-#include "src/cost/cost.h"
+#include "src/search/search_state.h"
 
 namespace stoke {
 
 struct Node {
   
-  Node(Node* parent) : num_visit_(0), score_(0), parent(parent) {}
+  Node(Node* parent, SearchState& state) : 
+    num_visit_(0),
+    score_(0),
+    state(state),
+    parent(parent) {}
   int num_visit_;
   float score_;
 
-  Cfg cfg;
-  Cost cost;
+  SearchState state;
 
   Node* parent;
   std::vector<Node*> children;

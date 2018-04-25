@@ -98,18 +98,19 @@ class Mcts {
   int k_;  // Number of children of given node
   float exploration_factor_;  // Exploration vs exploitation factor
 
-  Node* traverse(SearchState& state, int depth = -1);
+  Node* traverse(int depth = -1);
   void expand(Node* node);
-  float rollout(Node* node, SearchState& state, CostFunction& fxn);
+  float rollout(Node* node, CostFunction& fxn);
   void update_node(Node* node, float score);
 
+  // Score of a particular node. The higher the better.
   float node_score(Node* node);
   // Returns (successful_transformation, is_correct)
   std::pair<bool,bool> mcmc_step(SearchState& state, CostFunction& fxn);
   // Update from local_state.current to state.best
   void update_state(SearchState& state, SearchState& local_state, bool is_correct);
   
-  void trim(SearchState& state, int depth);
+  void trim(int depth);
   void delete_node(Node* node, Node* new_root = nullptr);
   bool stop_now(bool force_stop);
 

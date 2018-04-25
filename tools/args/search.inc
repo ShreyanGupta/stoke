@@ -59,13 +59,7 @@ cpputil::ValueArg<size_t>& k_arg =
   cpputil::ValueArg<size_t>::create("num_children")
   .usage("<int>")
   .description("Numebr of children created for a leaf node in MCTS")
-  .default_val(4);
-
-cpputil::ValueArg<size_t>& c_arg =
-  cpputil::ValueArg<size_t>::create("num_children_sampled")
-  .usage("<int>")
-  .description("Numebr of children to sample from for a leaf node in MCTS")
-  .default_val(1000);
+  .default_val(5);
 
 cpputil::ValueArg<size_t>& mcts_exploration_arg =
   cpputil::ValueArg<size_t>::create("exploration_factor")
@@ -77,7 +71,7 @@ cpputil::ValueArg<size_t>& mcts_si_arg =
   cpputil::ValueArg<size_t>::create("mcts_statistics_interval")
   .usage("<int>")
   .description("mcts_statistics_interval")
-  .default_val(200);
+  .default_val(50);
 
 } // namespace stoke
 
