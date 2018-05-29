@@ -15,9 +15,11 @@ namespace stoke {
 
 struct MctsStatistics {
   
-  MctsStatistics(size_t& num_mcts_itr_, size_t& num_mcmc_itr_, chrono::duration<double>& time_elapsed_) :
+  MctsStatistics(size_t& num_mcts_itr_, size_t& num_mcmc_itr_, size_t& unique_state_count_, size_t& duplicate_state_count_, chrono::duration<double>& time_elapsed_) :
     num_mcts_itr_(num_mcts_itr_),
     num_mcmc_itr_(num_mcmc_itr_),
+    unique_state_count_(unique_state_count_),
+    duplicate_state_count_(duplicate_state_count_),
     num_nodes_(1),
     time_elapsed_(time_elapsed_) {}
 
@@ -28,7 +30,10 @@ struct MctsStatistics {
     cout << "num_mcts_itr : " << num_mcts_itr_ << endl;
     cout << "time_elapsed : " << time_elapsed_.count() << endl;
     cout << "mcmc itr per sec : " << num_mcmc_itr_/time_elapsed_.count() << endl;
-    cout << "mcts itr per sec : " << num_mcts_itr_/time_elapsed_.count() << endl << endl;
+    cout << "mcts itr per sec : " << num_mcts_itr_/time_elapsed_.count() << endl;
+    cout << "unique_state_count : " << unique_state_count_ << endl;
+    cout << "duplicate_state_count : " << duplicate_state_count_ << endl;
+    cout << "percent dupliacte : " << 100 * duplicate_state_count_ / (duplicate_state_count_ + unique_state_count_ + 1) << "\%" << endl << endl;
 
     cout << "Best costs" << endl;
     cout << "time : cost" << endl;
@@ -61,6 +66,8 @@ struct MctsStatistics {
   
   size_t& num_mcts_itr_;
   size_t& num_mcmc_itr_;
+  size_t& unique_state_count_;
+  size_t& duplicate_state_count_;
   size_t num_nodes_;
   chrono::duration<double>& time_elapsed_;
   vector<pair<double, double>> time_cost_vec_;

@@ -102,6 +102,8 @@ class Mcts {
 
   // Store visited states
   unordered_set<Cfg> explored_states;
+  size_t unique_state_count_;
+  size_t duplicate_state_count_;
 
   Node* traverse(int depth = -1);
   void expand(Node* node);

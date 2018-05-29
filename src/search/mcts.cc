@@ -47,9 +47,11 @@ namespace stoke {
 
 Mcts::Mcts(Transform* transform) : 
   root_(nullptr),
-  transform_(transform), 
+  unique_state_count_(0),
+  duplicate_state_count_(0), 
+  transform_(transform),
   num_mcmc_itr_(0),
-  mcts_statistics_(MctsStatistics(num_itr_, num_mcmc_itr_, time_elapsed_)) {
+  mcts_statistics_(MctsStatistics(num_itr_, num_mcmc_itr_, unique_state_count_, duplicate_state_count_, time_elapsed_)) {
 
   set_seed(0);
   set_timeout_itr(0);
@@ -191,6 +193,13 @@ void Mcts::update_state(SearchState& state, SearchState& local_state, bool is_co
 
   if ((progress_cb_ != nullptr) && (new_best_yet || new_best_correct_yet)) {
     progress_cb_({state});
+    if(explored_states.count(local_state.current) == 0){
+      explored_states.insert(local_state.current);
+      ++unique_state_count_;
+    }
+    else {
+      ++duplicate_state_count_;
+    }
     auto& tc_vec = mcts_statistics_.time_cost_vec_;
     if(tc_vec.size() == 0 || new_cost < tc_vec.back().second){
       tc_vec.push_back(make_pair(time_elapsed_.count(), new_cost));

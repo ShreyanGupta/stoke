@@ -406,6 +406,10 @@ public:
     return instr.maybe_undef_set();
   }
 
+  bool operator==(const Cfg& rhs) const {
+    return get_code() == rhs.get_code();
+  }
+
   /** Deprecated: Use invariant_no_undef_reads() and invariant_no_undef_live_outs() */
   bool performs_undef_read() const {
     return !invariant_no_undef_reads() || !invariant_no_undef_live_outs();
