@@ -6,7 +6,9 @@
 #include <random>
 #include <functional>
 #include <utility>
+#include <unordered_set>
 
+#include "src/cfg/cfg.h"
 #include "src/cost/cost_function.h"
 #include "src/search/init.h"
 #include "src/search/progress_callback.h"
@@ -97,6 +99,9 @@ class Mcts {
   int r_;  // Depth of rollout
   int k_;  // Number of children of given node
   float exploration_factor_;  // Exploration vs exploitation factor
+
+  // Store visited states
+  unordered_set<Cfg> explored_states;
 
   Node* traverse(int depth = -1);
   void expand(Node* node);

@@ -136,8 +136,9 @@ void Mcts::update_node(Node* node, float score){
 float Mcts::node_score(Node* node){
   if(node->num_visit_ == 0) return 0;
 
+  // score and UCT confidence
   float x = node->score_ / node->num_visit_;
-  float confidence = sqrt(2*log(num_itr_ + 1) / node->num_visit_);  
+  float confidence = sqrt(log(node->parent->num_visit_ + 1) / node->num_visit_);  
   // -ve confidence as we are choosing the least value
   return x - exploration_factor_ * confidence;
 }

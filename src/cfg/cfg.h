@@ -493,4 +493,21 @@ private:
 
 } // namespace stoke
 
+namespace std {
+
+template<> struct hash<stoke::Cfg> {
+  size_t operator()(const stoke::Cfg &cfg) const {
+    // cfg.code() is of type x64asm::Code
+    // Typecast is to vector<x64asm::Instruction>
+    const auto code = static_cast<vector<x64asm::Instruction>>(cfg.get_code());
+    size_t seed = code.size();
+    for(const auto &instruction : code){
+      seed ^= instruction.hash() + (seed << 6) + (seed >> 2);
+    }
+    return seed;
+  }
+};
+
+} // namespace std
+
 #endif
